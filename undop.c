@@ -66,7 +66,7 @@ const char *bad_sites_filename = "bad_sites.txt";
 #define PACKET_MAX_LEN 65536
 #define BAD_SITES_MAX_LEN 1000
 
-char *bad_sites[BAD_SITES_MAX_LEN];
+char bad_sites[BAD_SITES_MAX_LEN][256];
 
 int main() {
   pcap_if_t *alldevs;
@@ -132,7 +132,6 @@ int main() {
   /*-------------------------------------------*/
 
   // some masking thing from npcap SDK
-
   /* Retrieve the mask of the first address of the interface */
   if(d->addresses != NULL)
     netmask=((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
@@ -166,9 +165,9 @@ int main() {
 
   int i;
   for (i = 0; i < BAD_SITES_MAX_LEN - 1; ++i) {
-    bad_sites[i] = malloc(256 * sizeof(char));
+    // bad_sites[i] = malloc(256 * sizeof(char));
     if (fgets(bad_sites[i], 256, bad_sites_file) == NULL) {
-      free(bad_sites[i]);
+      // free(bad_sites[i]);
       break;
     }
   }
@@ -178,7 +177,7 @@ int main() {
   pcap_freealldevs(alldevs);  
   pcap_loop(adhandle, 0, packet_handler, NULL);
   
-  for (int j = 0; j < i; ++j) free(bad_sites[j]);
+  // for (int j = 0; j < i; ++j) free(bad_sites[j]);
   return 0;
 }
 
@@ -202,16 +201,21 @@ int change_brightness(int brightness) {
 }
 
 int trigger_brightness_process() {
-  char current_brightness[40];
+  FILE *cmdstream = popen("powershell.exe \"$myMonitor = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightness; echo $myMonitor.CurrentBrightness\"", "r");
 
-  FILE *cmdstream = popen("powershell.exe $myMonitor = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightness; echo $myMonitor.CurrentBrightness", "-r");
-
-  if (!cmdstream || fread(current_brightness, sizeof(char), 3, cmdstream) < 1)  {
-    perror("Failed getting current brightness");
+  if (!cmdstream) {
+    perror("Failed to run command");
     return -1;
-  } else {
-    pclose(cmdstream);
   }
+
+  char current_brightness[128];
+  if (fread(current_brightness, sizeof(char), sizeof(current_brightness) - 1, cmdstream) < 1) {
+    perror("Failed getting current brightness");
+    pclose(cmdstream);
+    return -1;
+  }
+
+  pclose(cmdstream);
 
   current_brightness[sizeof(current_brightness) - 1] = '\0';
 
@@ -224,7 +228,6 @@ int trigger_brightness_process() {
       return -1;
     }
   }
-  
 }
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
