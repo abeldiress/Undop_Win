@@ -76,7 +76,7 @@ int main() {
   pcap_t *adhandle;
   char errbuf[PCAP_ERRBUF_SIZE];
   u_int netmask;
-  char packet_filter[] = "udp port 53";
+  char packet_filter[] = "tcp port 443";
   struct bpf_program fcode;
 
   /* Load Npcap and its functions. */
@@ -105,12 +105,12 @@ int main() {
   }
   
   printf("Enter the interface number (1-%d): ", intf);
-  scanf_s("%d", &inum);
+  scanf("%d", &inum);
 
   while (inum < 1 || inum > intf) {
     printf("\nInterface number out of range.");
     printf("Enter the interface number (1-%d): ", intf);
-    scanf_s("%d", &inum);
+    scanf("%d", &inum);
   }
 
   for(d = alldevs, intf = 0; intf < inum-1; d = d->next, intf++);
@@ -131,7 +131,7 @@ int main() {
 
   /*-------------------------------------------*/
 
-  // some masking thing from npcap SDK
+  // some masking config from npcap SDK
   /* Retrieve the mask of the first address of the interface */
   if(d->addresses != NULL)
     netmask=((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
@@ -195,8 +195,7 @@ int change_brightness(int brightness) {
   char brightness_str[4];
   char command[200];
   sprintf(brightness_str, "%d", brightness);
-  // ik this line is some bs im just prototyping
-  snprintf(command, sizeof(command), "powershell.exe $myMonitor = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightnessMethods; $myMonitor.wmisetbrightness(3, %s)", brightness_str);
+  sprintf(command, "powershell.exe $myMonitor = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightnessMethods; $myMonitor.wmisetbrightness(3, %s)", brightness_str);
   return system(command);
 }
 
@@ -231,22 +230,22 @@ int trigger_brightness_process() {
 }
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
-  // printf("Packet length: %d\n", header->len);
+  printf("Packet length: %d\n", header->len);
 
-  // for (int i = 0; i < header->len; i++) {
-  //   printf("%02x ", pkt_data[i]);
-  //   if ((i + 1) % 16 == 0)
-  //     printf("\n");
-  // }
+  for (int i = 0; i < header->len; i++) {
+    printf("%x ", pkt_data[i]);
+    if ((i + 1) % 16 == 0)
+      printf("\n");
+  }
 
   char hostname[PACKET_MAX_LEN];
 
   parse_hostname(hostname, pkt_data);
 
-  printf("Hostname %s\n", hostname);
+  printf("\nHostname %s\n", hostname);
 
   for (int i = 0; i < BAD_SITES_MAX_LEN; ++i) {
-    if (strstr(hostname, bad_sites[i]) != NULL) {
+    if (strstr(hostname, pkt_data) != NULL) {
       printf("MATCH FOUND: %x\n", bad_sites[i]);
       if (trigger_brightness_process() != 0) {
         printf("Error changing brightness.\n");
