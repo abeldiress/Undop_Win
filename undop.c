@@ -43,7 +43,7 @@ typedef struct ip_header {
   ip_address  saddr; // Source address
   ip_address  daddr; // Destination address
   u_int  op_pad;     // Option + Padding
-}ip_header;
+} ip_header;
 
 /* UDP header*/
 typedef struct udp_header {
@@ -51,13 +51,8 @@ typedef struct udp_header {
   u_short dport; // Destination port
   u_short len;   // Datagram length
   u_short crc;   // Checksum
-}udp_header;
+} udp_header;
 
-// using pcap type definition to keep it in spirit...
-typedef struct packet_data {
-  u_char *link_layer;
-
-} packet_data;
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
 
@@ -67,6 +62,22 @@ const char *bad_sites_filename = "bad_sites.txt";
 #define BAD_SITES_MAX_LEN 1000
 
 char bad_sites[BAD_SITES_MAX_LEN][256];
+
+void trim(char *str) {
+  char *src = str, *dst = str;
+
+  while (*src != '\0') {
+    if (!isspace((u_char) *src) && *src != '\\') {
+      *dst++ = *src;
+    } else if (*src == '\\') {
+      if (*(src + 1) != '\0') {
+        src++;
+      }
+    }
+    src++;
+  }
+  *dst = '\0';
+}
 
 int main() {
   pcap_if_t *alldevs;
@@ -123,7 +134,7 @@ int main() {
     return -1;
   }
   
-  if(pcap_datalink(adhandle) != DLT_EN10MB) {
+  if (pcap_datalink(adhandle) != DLT_EN10MB) {
     fprintf(stderr,"\nThis program works only on Ethernet networks.\n");
     pcap_freealldevs(alldevs);
     return -1;
@@ -163,21 +174,20 @@ int main() {
     return -1;
   }
 
-  int i;
-  for (i = 0; i < BAD_SITES_MAX_LEN - 1; ++i) {
-    // bad_sites[i] = malloc(256 * sizeof(char));
-    if (fgets(bad_sites[i], 256, bad_sites_file) == NULL) {
-      // free(bad_sites[i]);
-      break;
-    }
+  char line[256];
+  for (int i = 0; i < BAD_SITES_MAX_LEN - 1 && fgets(line, 256, bad_sites_file); ++i) {
+    trim(bad_sites[i]);
   }
 
   printf("bad_sites.txt processed...\n");
+
+  for (int j=0; j < BAD_SITES_MAX_LEN; ++j) {
+    printf("%s\n", bad_sites[j]);
+  }
   
   pcap_freealldevs(alldevs);  
   pcap_loop(adhandle, 0, packet_handler, NULL);
   
-  // for (int j = 0; j < i; ++j) free(bad_sites[j]);
   return 0;
 }
 
@@ -229,6 +239,21 @@ int trigger_brightness_process() {
   }
 }
 
+int strstr_custom(const char *str1, const char *str2, int max_len) {
+  int cnt = 0;
+  for (int i=0; i < max_len; ++i) {
+    if (*(str1 + i) == *(str2 + cnt)) {
+      ++cnt;
+    } else {
+      cnt = 0;
+    }
+    if (cnt == strlen(str2)) {
+      return 1;
+    }
+  }
+  return cnt == strlen(str2);
+}
+
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
   printf("Packet length: %d\n", header->len);
 
@@ -241,12 +266,11 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
   char hostname[PACKET_MAX_LEN];
 
   parse_hostname(hostname, pkt_data);
-
   printf("\nHostname %s\n", hostname);
 
   for (int i = 0; i < BAD_SITES_MAX_LEN; ++i) {
-    if (strstr(hostname, pkt_data) != NULL) {
-      printf("MATCH FOUND: %x\n", bad_sites[i]);
+    if (strstr_custom(pkt_data, bad_sites[i], header->len) && strlen(bad_sites[i]) > 0) {
+      printf("MATCH FOUND: (%s)\n", strlen(bad_sites[i]), bad_sites[i]);
       if (trigger_brightness_process() != 0) {
         printf("Error changing brightness.\n");
         exit(1);
